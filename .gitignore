@@ -49,3 +49,5 @@ build/
 Thumbs.db
 .vscode/
 tempCodeRunnerFile.py
+
+CLAUDE.local.md
