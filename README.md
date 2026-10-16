@@ -20,7 +20,7 @@ The project emphasizes clean SystemVerilog, self-checking testbenches, a bit-exa
 
 - [X] 1. Basics: switches-to-LEDs warm-up, UART
 - [X] 2. Train a small model in Python (about 96.7% accuracy)
-- [ ] 3. Quantize to int8, write a pure-integer golden model, export `.mem` weights
+- [X] 3. Quantize to int8, write a pure-integer golden model, export `.mem` weights; no measurable accuracy loss from int8 quantization.; Quantize to int8 (96.73% accuracy, matching float); Agreement with float model	99.85% (15 of 10,000 images differ)
 - [ ] 4. One MAC unit with a self-checking testbench
 - [ ] 5. One layer with a single MAC, compared to the golden model
 - [ ] 6. Full network in simulation, hardware accuracy vs Python
