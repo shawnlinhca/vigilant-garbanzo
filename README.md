@@ -18,8 +18,8 @@ The project emphasizes clean SystemVerilog, self-checking testbenches, a bit-exa
 
 ## Planned Roadmap
 
-- [ ] 1. Basics: switches-to-LEDs warm-up, UART
-- [ ] 2. Train a small model in Python (about 97% accuracy)
+- [X] 1. Basics: switches-to-LEDs warm-up, UART
+- [X] 2. Train a small model in Python (about 96.7% accuracy)
 - [ ] 3. Quantize to int8, write a pure-integer golden model, export `.mem` weights
 - [ ] 4. One MAC unit with a self-checking testbench
 - [ ] 5. One layer with a single MAC, compared to the golden model
