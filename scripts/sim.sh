@@ -11,6 +11,10 @@ cd "$(dirname "$0")/.."            # repo root
 mkdir -p sim_build
 cd sim_build
 
+# $readmemh looks in the simulator's working directory, so copy the .mem files here
+cp -f ../weights/*.mem .
+cp -f ../tb/vectors/*.mem . 2>/dev/null || true
+
 "$VIVADO_BIN/xvlog.bat" -sv ../src/*.sv ../tb/*.sv
 "$VIVADO_BIN/xelab.bat" "$TB" -s "${TB}_sim"
 "$VIVADO_BIN/xsim.bat" "${TB}_sim" -runall
