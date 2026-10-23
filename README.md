@@ -8,6 +8,12 @@ Build a complete, measurable hardware inference pipeline: train a small model in
 
 The project emphasizes clean SystemVerilog, self-checking testbenches, a bit-exact integer golden model, and measured results (accuracy, cycle count, resource usage, clock speed).
 
+## Demo
+
+![Basys 3 running the digit classifier](docs/board_demo.jpg)
+
+A PC streams MNIST test images to the board over USB-UART; the FPGA classifies each one and shows the digit on the seven-segment display. Over all 10,000 test images the board's answers matched the Python integer model exactly (96.73% accuracy).
+
 ## Hardware and Tools
 
 - **Board:** Digilent Basys 3 (Artix-7 XC7A35T-1CPG236C)
