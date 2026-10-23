@@ -29,7 +29,7 @@ The project emphasizes clean SystemVerilog, self-checking testbenches, a bit-exa
 
 ## Results
 
-Measured so far (simulation and Python):
+Measured so far (Python, simulation, and Vivado synthesis):
 
 | Metric | Result | Measured by |
 | --- | --- | --- |
@@ -37,11 +37,30 @@ Measured so far (simulation and Python):
 | Int8 test accuracy (10,000 images) | 96.73% | `python/golden.py` |
 | Float vs. int8 prediction agreement | 99.85% | `python/golden.py` |
 | Hardware vs. golden model (simulation) | 100/100 predictions identical | `tb/tb_network.sv` |
-| Latency, one MAC | 25,587 cycles per image | `tb/tb_network.sv` |
-| Latency at an assumed 100 MHz clock | about 256 µs per image | derived from cycle count |
+| Latency, one MAC per layer | 25,587 cycles per image | `tb/tb_network.sv` |
+| Latency at 100 MHz (timing met in synthesis) | about 256 µs per image | derived from cycle count |
 | Accumulator width needed (worst case) | 26 bits (layer 1), 21 bits (layer 2) | analysis |
+| Resources, one MAC per layer (post-route) | 1,552 LUTs (7.5%), 1,103 registers (2.7%), 9.5 BRAM tiles (19%), 2 DSPs (2.2%) | `scripts/synth.sh` |
+| Timing at 100 MHz target | Met, worst setup slack +0.975 ns (estimated max about 111 MHz) | `scripts/synth.sh` |
 
-Pending (needs synthesis and the board): achieved clock speed, LUT / DSP / BRAM usage, on-board accuracy over UART, and the same measurements for 4, 8, and 16 parallel MACs.
+Synthesis numbers come from an out-of-context run of the `network` module (Vivado 2026.1, Artix-7 -1 speed grade). That run does not model clock-buffer delay or skew, so the clock estimate is approximate until it is re-checked in the full top-level build.
+
+### Multiplier mapping: LUTs vs. DSP blocks
+
+By default Vivado built the 8x9-bit multiplier from LUTs. Adding `(* use_dsp = "yes" *)` to `src/mac.sv` moves each MAC's multiply-add into a DSP48 block. The network has two MACs (one per layer), hence 2 DSPs.
+
+| | LUT multiplier | DSP-mapped | Change |
+| --- | --- | --- | --- |
+| LUTs | 1,726 | 1,552 | -174 (-10.1%) |
+| Registers | 1,183 | 1,103 | -80 (-6.8%) |
+| Block RAM tiles | 9.5 | 9.5 | none |
+| DSPs | 0 | 2 | +2 |
+| Worst setup slack at 10 ns | +0.562 ns | +0.975 ns | +0.413 ns |
+| Estimated max clock | 106.0 MHz | 110.8 MHz | +4.5% |
+
+The clock gain is small, so the multiplier was not the only limit on speed; the critical path is examined in `docs/reports/critical_path.rpt`.
+
+Pending: on-board accuracy over UART, and the same measurements for 4, 8, and 16 parallel MACs.
 
 ## Architecture
 

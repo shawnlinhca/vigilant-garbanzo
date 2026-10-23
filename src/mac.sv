@@ -8,6 +8,7 @@
 //
 // Priority, highest first: rst, load, en. `load` preloads the accumulator
 // (the layer controller uses it to start each neuron at its bias).
+(* use_dsp = "yes" *)
 module mac #(
     parameter int A_W   = 8,
     parameter int B_W   = 9,
