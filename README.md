@@ -81,6 +81,8 @@ image (784 x uint8) -> [image RAM] -> layer 1 (784 -> 32, one MAC) -> ReLU/shift
 - **Argmax** (`src/argmax.sv`): sequential, one comparator, ties go to the lowest digit (same as NumPy).
 - **UART receiver** (`src/uart_rx.sv`): 8N1 at 115,200 baud from the 100 MHz clock (868 clocks per bit), with a two-flop input synchronizer, mid-bit sampling, glitch rejection, and a framing-error flag.
 - **UART loader** (`src/uart_loader.sv`): writes the 784 received bytes into the network's image memory, then starts the network. Framing errors, mid-image stalls (timeout), and bytes arriving while the network is busy discard the partial image so the stream always resyncs.
+- **UART transmitter** (`src/uart_tx.sv`): same 8N1 format and baud generator as the receiver; sends the predicted digit back to the PC.
+- **Seven-segment driver** (`src/seg7.sv`): shows the predicted digit (or "-" before a result) on the rightmost display digit.
 - **Network** (`src/network.sv`): chains the pieces. Images are written in through a byte-wide write port, which the UART receiver will drive.
 
 ## Verification
@@ -95,6 +97,8 @@ Every testbench is self-checking and prints PASS or FAIL.
 | `tb/tb_network.sv` | Full network against the golden model on real MNIST test images, loaded through the write port |
 | `tb/tb_uart_rx.sv` | UART receiver: all 256 byte values back-to-back, bad stop bit, glitch rejection, and the real 868-clock bit time |
 | `tb/tb_uart_loader.sv` | UART loader: full image, start only after the last write lands, and recovery from a framing error, a stall, and a busy network |
+| `tb/tb_uart_tx.sv` | UART transmitter: all 256 values decoded by an independent line decoder, exact busy time, send-while-busy ignored, real baud rate |
+| `tb/tb_seg7.sv` | Seven-segment driver: every digit, the error pattern, and the blank state, specified by lit-segment letters |
 
 The golden model (`python/golden.py`) is pure integer arithmetic and reads the same `.mem` files the hardware loads. `python/export_vectors.py` writes its expected values into `tb/vectors/`.
 
