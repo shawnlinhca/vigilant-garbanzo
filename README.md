@@ -38,14 +38,16 @@ Measured so far (Python, simulation, and Vivado synthesis):
 | Float vs. int8 prediction agreement | 99.85% | `python/golden.py` |
 | Hardware vs. golden model (simulation) | 100/100 predictions identical | `tb/tb_network.sv` |
 | Latency, one MAC per layer | 25,587 cycles per image | `tb/tb_network.sv` |
-| Latency at 100 MHz (timing met in synthesis) | about 256 µs per image | derived from cycle count |
+| Latency at the board's 100 MHz clock (timing met with margin) | about 256 µs per image | derived from cycle count |
 | Accumulator width needed (worst case) | 26 bits (layer 1), 21 bits (layer 2) | analysis |
-| Resources, one MAC per layer (post-route) | 1,552 LUTs (7.5%), 1,103 registers (2.7%), 9.5 BRAM tiles (19%), 2 DSPs (2.2%) | `scripts/synth.sh` |
-| Timing at 100 MHz target | Met, worst setup slack +0.975 ns (estimated max about 111 MHz) | `scripts/synth.sh` |
+| Resources, one MAC per layer (post-route) | 1,487 LUTs (7.2%), 1,327 registers (3.2%), 9.5 BRAM tiles (19%), 2 DSPs (2.2%) | `scripts/synth.sh` |
+| Timing at 125 MHz target (8 ns) | Met, worst setup slack +0.850 ns (estimated max about 140 MHz) | `scripts/synth.sh` |
 
 Synthesis numbers come from an out-of-context run of the `network` module (Vivado 2026.1, Artix-7 -1 speed grade). That run does not model clock-buffer delay or skew, so the clock estimate is approximate until it is re-checked in the full top-level build.
 
 ### Multiplier mapping: LUTs vs. DSP blocks
+
+_Both runs below used a 10 ns target, before the timing fix in the next section._
 
 By default Vivado built the 8x9-bit multiplier from LUTs. Adding `(* use_dsp = "yes" *)` to `src/mac.sv` moves each MAC's multiply-add into a DSP48 block. The network has two MACs (one per layer), hence 2 DSPs.
 
@@ -59,6 +61,10 @@ By default Vivado built the 8x9-bit multiplier from LUTs. Adding `(* use_dsp = "
 | Estimated max clock | 106.0 MHz | 110.8 MHz | +4.5% |
 
 The clock gain is small, so the multiplier was not the only limit on speed; the critical path is examined in `docs/reports/critical_path.rpt`.
+
+### Timing: critical-path fix
+
+With DSP-mapped MACs the worst path at the 10 ns target (8.58 ns, 55% routing) ran from a stored layer-1 accumulator through the ReLU/shift/clamp logic and a 32:1 read mux into layer 2's DSP. Registering the 32 hidden activations splits that into two short paths. It costs 224 registers and no latency (the cycle count is unchanged at 25,587). The design then meets an 8 ns target (125 MHz) with +0.850 ns slack, and the critical path moves to the image block RAM feeding layer 1's DSP. The board clock is 100 MHz, so no further clock tuning is planned; DSP-internal pipeline registers plus an MMCM would be the next step to run faster.
 
 Pending: on-board accuracy over UART, and the same measurements for 4, 8, and 16 parallel MACs.
 

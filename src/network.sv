@@ -50,10 +50,18 @@ module network #(
         relu_shift #(.SHIFT(SHIFT1)) u_act (.x(acc1[g]), .y(a1[g]));
     end
 
+    // Register the activations: splits the ReLU logic and the 32:1 read mux into two
+    // short paths (timing). No latency cost: layer 2 reads these several cycles after
+    // layer 1 finishes, and layer 1's results do not change while layer 2 runs.
+    logic [6:0] a1_q [N_HID];
+    always_ff @(posedge clk) begin
+        for (int g = 0; g < N_HID; g++) a1_q[g] <= a1[g];
+    end
+
     // ---- Layer 2: 32 -> 10, reading the hidden activations (1-cycle read latency) ----
     logic [$clog2(N_HID)-1:0] x2_addr;
     logic signed [8:0]        x2_data;
-    always_ff @(posedge clk) x2_data <= $signed({2'b00, a1[x2_addr]});
+    always_ff @(posedge clk) x2_data <= $signed({2'b00, a1_q[x2_addr]});
 
     logic               l2_busy, l2_done;
     logic signed [31:0] acc2 [N_OUT];
