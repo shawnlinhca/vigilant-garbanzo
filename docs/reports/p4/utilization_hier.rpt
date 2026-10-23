@@ -1,0 +1,35 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2026.1 (win64) Build 6511674 Tue Jun 16 11:02:23 MDT 2026
+| Date         : Fri Oct 23 16:50:09 2026
+| Host         : DESKTOP-NF5G4CV running 64-bit major release  (build 9200)
+| Command      : report_utilization -hierarchical -file C:/Users/ericy/vigilant-garbanzo/docs/reports/p4/utilization_hier.rpt
+| Design       : network
+| Device       : xc7a35tcpg236-1
+| Speed File   : -1
+| Design State : Routed
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+Utilization Design Information
+
+Table of Contents
+-----------------
+1. Utilization by Hierarchy
+
+1. Utilization by Hierarchy
+---------------------------
+
++--------------------+-----------------------+------------+------------+---------+------+------+--------+--------+------------+
+|      Instance      |         Module        | Total LUTs | Logic LUTs | LUTRAMs | SRLs |  FFs | RAMB36 | RAMB18 | DSP Blocks |
++--------------------+-----------------------+------------+------------+---------+------+------+--------+--------+------------+
+| network            |                 (top) |       1476 |       1476 |       0 |    0 | 1368 |      8 |      2 |          8 |
+|   (network)        |                 (top) |          1 |          1 |       0 |    0 |  227 |      0 |      1 |          0 |
+|   u_l1             |                 layer |        103 |        103 |       0 |    0 |  787 |      8 |      0 |          4 |
+|     (u_l1)         |                 layer |        102 |        102 |       0 |    0 |  787 |      8 |      0 |          0 |
+|   u_l2             | layer__parameterized0 |        305 |        305 |       0 |    0 |  343 |      0 |      1 |          4 |
+|     (u_l2)         | layer__parameterized0 |        240 |        240 |       0 |    0 |  343 |      0 |      1 |          0 |
+|     g_mac[3].u_mac |                mac_33 |         64 |         64 |       0 |    0 |    0 |      0 |      0 |          1 |
++--------------------+-----------------------+------------+------------+---------+------+------+--------+--------+------------+
+* Note: The sum of lower-level cells may be larger than their parent cells total, due to cross-hierarchy LUT combining
+
+

@@ -31,7 +31,7 @@ A PC streams MNIST test images to the board over USB-UART; the FPGA classifies e
 - [x] 5. One layer with a single MAC, compared to the golden model
 - [x] 6. Full network in simulation: 100/100 predictions match the golden model
 - [x] 7. Run on the board over UART: 96.73% accuracy on all 10,000 test images, identical to the golden model
-- [ ] 8. Parallel MACs (4, 8, 16): measure cycles, LUT/DSP/BRAM, and clock speed
+- [x] 8. Parallel MACs (1, 4, 8, 16): up to 15.8x lower latency (1,623 cycles) for 26 DSPs; see the table below
 
 ## Results
 
@@ -46,8 +46,8 @@ Measured so far (Python, simulation, Vivado, and on the board):
 | Latency, one MAC per layer | 25,587 cycles per image | `tb/tb_network.sv` |
 | Latency at the board's 100 MHz clock (timing met with margin) | about 256 µs per image | derived from cycle count |
 | Accumulator width needed (worst case) | 26 bits (layer 1), 21 bits (layer 2) | analysis |
-| Resources, `network` module only (post-route, out-of-context) | 1,487 LUTs (7.2%), 1,327 registers (3.2%), 9.5 BRAM tiles (19%), 2 DSPs (2.2%) | `scripts/synth.sh` |
-| Timing, `network` module at a 125 MHz target (8 ns) | Met, worst setup slack +0.850 ns | `scripts/synth.sh` |
+| Resources, `network` module only (post-route, out-of-context) | 1,484 LUTs (7.1%), 1,326 registers (3.2%), 9 BRAM tiles (18%), 2 DSPs (2.2%) | `scripts/sweep.sh` |
+| Timing, `network` module at a 125 MHz target (8 ns) | Met, worst setup slack +0.794 ns | `scripts/sweep.sh` |
 | Resources, full board design (post-route) | 1,586 LUTs (7.6%), 1,465 registers (3.5%), 9.5 BRAM tiles (19%), 2 DSPs (2.2%) | `scripts/build.sh` |
 | Timing, full board design at 100 MHz | Met: setup slack +1.563 ns, hold slack +0.164 ns | `scripts/build.sh` |
 | On-board accuracy, 10,000 MNIST test images over UART | 96.73% (9,673/10,000) | `python/send_images.py` |
@@ -75,9 +75,28 @@ The clock gain is small, so the multiplier was not the only limit on speed; the 
 
 ### Timing: critical-path fix
 
-With DSP-mapped MACs the worst path at the 10 ns target (8.58 ns, 55% routing) ran from a stored layer-1 accumulator through the ReLU/shift/clamp logic and a 32:1 read mux into layer 2's DSP. Registering the 32 hidden activations splits that into two short paths. It costs 224 registers and no latency (the cycle count is unchanged at 25,587). The design then meets an 8 ns target (125 MHz) with +0.850 ns slack, and the critical path moves to the image block RAM feeding layer 1's DSP. The board clock is 100 MHz and the full board build meets it with margin, so no further clock tuning is planned; DSP-internal pipeline registers plus an MMCM would be the next step to run faster.
+With DSP-mapped MACs the worst path at the 10 ns target (8.58 ns, 55% routing) ran from a stored layer-1 accumulator through the ReLU/shift/clamp logic and a 32:1 read mux into layer 2's DSP. Registering the 32 hidden activations splits that into two short paths. It costs 224 registers and no latency (the cycle count is unchanged at 25,587). The design then meets an 8 ns target (125 MHz) with +0.850 ns slack, and the critical path moves to the image block RAM feeding layer 1's DSP. The board clock is 100 MHz and the full board build meets it with margin, so no further clock tuning is planned; DSP-internal pipeline registers plus an MMCM would be the next step to run faster. (That measurement gave +0.850 ns slack; re-measured after the later parallel-MAC refactor the same configuration gives +0.794 ns, which is the figure in the table above. Small differences are expected when the netlist changes slightly and is placed and routed again.)
 
-Pending: the same measurements for 4, 8, and 16 parallel MACs (roadmap step 8). The end-to-end rate on this board is limited by the 115,200-baud UART, not by the network.
+### Parallel MACs
+
+Each layer can use P MAC units working on P neurons at once, sharing the input stream (P = 1 is the baseline above; layer 2 has only 10 outputs, so it uses min(P, 10) MACs). All variants pass the same end-to-end simulation against the golden model (100/100 predictions identical), and each testbench checks the exact cycle count. Resources and timing are from out-of-context synthesis of the `network` module at an 8 ns (125 MHz) target; latency is in clock cycles, converted at 100 MHz.
+
+| MACs per layer (P) | Latency (cycles) | Speedup | Latency at 100 MHz | LUTs | Registers | BRAM tiles | DSPs | Setup slack at 8 ns | Est. max clock* |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 25,587 | 1.00x | 255.9 µs | 1,484 | 1,326 | 9 | 2 | +0.794 ns | about 139 MHz |
+| 4 | 6,423 | 3.98x | 64.2 µs | 1,476 | 1,368 | 9 | 8 | +0.578 ns | about 135 MHz |
+| 8 | 3,235 | 7.91x | 32.4 µs | 1,438 | 1,323 | 9.5 | 16 | +0.434 ns | about 132 MHz |
+| 16 | 1,623 | 15.77x | 16.2 µs | 1,433 | 1,335 | 10 | 26 | +0.037 ns | about 126 MHz |
+
+\* Extrapolated from the slack as 1000 / (8 - slack) MHz; approximate, since the out-of-context run does not model clock skew.
+
+- **Speedup is close to linear** (98.5% to 99.6% of ideal). Layer 1 is almost all of the P = 1 latency; what does not scale is a fixed 47 cycles at P = 16 (layer 2 plus start and argmax overhead) and 4 overhead cycles per group of neurons.
+- **The cost is DSP blocks**, one per MAC: 26 of the 90 on this chip at P = 16. LUT and register counts stay roughly flat because the multiply-accumulate lives in the DSPs. Block RAM grows slightly (9 to 10 tiles) as the weight memory gets wider so that every MAC is fed each cycle.
+- **Timing slack shrinks as P grows**, and P = 16 only just meets 125 MHz. All variants meet a clock faster than the board's 100 MHz.
+- **On this board the UART is the bottleneck, not the network.** Sending an image takes about 68 ms; even the slowest variant computes it in 0.26 ms and the fastest in 0.016 ms. Parallel MACs would matter with a faster data source. The board run above used P = 1; the parallel variants are verified in simulation and synthesis only.
+
+Per-variant reports are in `docs/reports/p1/`, `p4/`, `p8/`, and `p16/`, and the table is regenerated by `bash scripts/sweep.sh`.
+
 
 ## Architecture
 
@@ -168,7 +187,7 @@ bash scripts/synth.sh
 CLK_NS=8.0 bash scripts/synth.sh
 ```
 
-Reports land in `docs/reports/`.
+Reports land in `docs/reports/p<P>/` (use `P=4 bash scripts/synth.sh` for parallel variants). To simulate and synthesize every variant and rebuild the table: `bash scripts/sweep.sh`.
 
 **5. Build the bitstream** (full design with real pins; writes `synth_build/board_top.bit`)
 
