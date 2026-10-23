@@ -18,13 +18,13 @@ The project emphasizes clean SystemVerilog, self-checking testbenches, a bit-exa
 
 ## Roadmap
 
-- [ ] 1. Basics: switches-to-LEDs warm-up (simulated), UART (pending)
+- [ ] 1. Basics: switches-to-LEDs warm-up and UART (both simulated; hardware run pending)
 - [x] 2. Train a small model in Python (96.70% test accuracy, float32)
 - [x] 3. Quantize to int8, write a pure-integer golden model, export `.mem` weights (96.73% test accuracy)
 - [x] 4. One MAC unit with a self-checking testbench
 - [x] 5. One layer with a single MAC, compared to the golden model
 - [x] 6. Full network in simulation: 100/100 predictions match the golden model
-- [ ] 7. Run on the board over UART
+- [ ] 7. Run on the board over UART (design, simulation, and bitstream done; hardware run pending)
 - [ ] 8. Parallel MACs (4, 8, 16): measure cycles, LUT/DSP/BRAM, and clock speed
 
 ## Results
@@ -40,10 +40,13 @@ Measured so far (Python, simulation, and Vivado synthesis):
 | Latency, one MAC per layer | 25,587 cycles per image | `tb/tb_network.sv` |
 | Latency at the board's 100 MHz clock (timing met with margin) | about 256 µs per image | derived from cycle count |
 | Accumulator width needed (worst case) | 26 bits (layer 1), 21 bits (layer 2) | analysis |
-| Resources, one MAC per layer (post-route) | 1,487 LUTs (7.2%), 1,327 registers (3.2%), 9.5 BRAM tiles (19%), 2 DSPs (2.2%) | `scripts/synth.sh` |
-| Timing at 125 MHz target (8 ns) | Met, worst setup slack +0.850 ns (estimated max about 140 MHz) | `scripts/synth.sh` |
+| Resources, `network` module only (post-route, out-of-context) | 1,487 LUTs (7.2%), 1,327 registers (3.2%), 9.5 BRAM tiles (19%), 2 DSPs (2.2%) | `scripts/synth.sh` |
+| Timing, `network` module at a 125 MHz target (8 ns) | Met, worst setup slack +0.850 ns | `scripts/synth.sh` |
+| Resources, full board design (post-route) | 1,586 LUTs (7.6%), 1,465 registers (3.5%), 9.5 BRAM tiles (19%), 2 DSPs (2.2%) | `scripts/build.sh` |
+| Timing, full board design at 100 MHz | Met: setup slack +1.563 ns, hold slack +0.164 ns | `scripts/build.sh` |
+| Bitstream | Generated; not yet run on hardware | `scripts/build.sh` |
 
-Synthesis numbers come from an out-of-context run of the `network` module (Vivado 2026.1, Artix-7 -1 speed grade). That run does not model clock-buffer delay or skew, so the clock estimate is approximate until it is re-checked in the full top-level build.
+Network-only numbers come from an out-of-context run of the `network` module (Vivado 2026.1, Artix-7 -1 speed grade), which does not model clock-buffer delay or skew. The full-board numbers come from `scripts/build.sh`, which implements `board_top` with the real pin constraints and clock buffer.
 
 ### Multiplier mapping: LUTs vs. DSP blocks
 
@@ -64,7 +67,7 @@ The clock gain is small, so the multiplier was not the only limit on speed; the 
 
 ### Timing: critical-path fix
 
-With DSP-mapped MACs the worst path at the 10 ns target (8.58 ns, 55% routing) ran from a stored layer-1 accumulator through the ReLU/shift/clamp logic and a 32:1 read mux into layer 2's DSP. Registering the 32 hidden activations splits that into two short paths. It costs 224 registers and no latency (the cycle count is unchanged at 25,587). The design then meets an 8 ns target (125 MHz) with +0.850 ns slack, and the critical path moves to the image block RAM feeding layer 1's DSP. The board clock is 100 MHz, so no further clock tuning is planned; DSP-internal pipeline registers plus an MMCM would be the next step to run faster.
+With DSP-mapped MACs the worst path at the 10 ns target (8.58 ns, 55% routing) ran from a stored layer-1 accumulator through the ReLU/shift/clamp logic and a 32:1 read mux into layer 2's DSP. Registering the 32 hidden activations splits that into two short paths. It costs 224 registers and no latency (the cycle count is unchanged at 25,587). The design then meets an 8 ns target (125 MHz) with +0.850 ns slack, and the critical path moves to the image block RAM feeding layer 1's DSP. The board clock is 100 MHz and the full board build meets it with margin, so no further clock tuning is planned; DSP-internal pipeline registers plus an MMCM would be the next step to run faster.
 
 Pending: on-board accuracy over UART, and the same measurements for 4, 8, and 16 parallel MACs.
 
