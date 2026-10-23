@@ -83,6 +83,7 @@ image (784 x uint8) -> [image RAM] -> layer 1 (784 -> 32, one MAC) -> ReLU/shift
 - **UART loader** (`src/uart_loader.sv`): writes the 784 received bytes into the network's image memory, then starts the network. Framing errors, mid-image stalls (timeout), and bytes arriving while the network is busy discard the partial image so the stream always resyncs.
 - **UART transmitter** (`src/uart_tx.sv`): same 8N1 format and baud generator as the receiver; sends the predicted digit back to the PC.
 - **Seven-segment driver** (`src/seg7.sv`): shows the predicted digit (or "-" before a result) on the rightmost display digit.
+- **Board top level** (`src/board_top.sv`): ties it together for the Basys 3. A PC sends 784 pixel bytes over the USB-UART; the board classifies the image, shows the digit on the seven-segment display, and replies with the digit as an ASCII character. LEDs show the last prediction, an image counter, and error/busy flags; the center button is reset.
 - **Network** (`src/network.sv`): chains the pieces. Images are written in through a byte-wide write port, which the UART receiver will drive.
 
 ## Verification
@@ -99,6 +100,7 @@ Every testbench is self-checking and prints PASS or FAIL.
 | `tb/tb_uart_loader.sv` | UART loader: full image, start only after the last write lands, and recovery from a framing error, a stall, and a busy network |
 | `tb/tb_uart_tx.sv` | UART transmitter: all 256 values decoded by an independent line decoder, exact busy time, send-while-busy ignored, real baud rate |
 | `tb/tb_seg7.sv` | Seven-segment driver: every digit, the error pattern, and the blank state, specified by lit-segment letters |
+| `tb/tb_board_top.sv` | Whole board end to end: real MNIST images sent over a serial line, checking the ASCII reply, display, and LEDs, including recovery from a framing error mid-image |
 
 The golden model (`python/golden.py`) is pure integer arithmetic and reads the same `.mem` files the hardware loads. `python/export_vectors.py` writes its expected values into `tb/vectors/`.
 
@@ -110,9 +112,9 @@ The golden model (`python/golden.py`) is pure integer arithmetic and reads the s
 | `weights/` | Quantized weights and biases (`.mem`), float model, `quant_params.json` |
 | `src/` | SystemVerilog design sources |
 | `tb/` | Self-checking testbenches; `tb/vectors/` holds exported test vectors |
-| `constraints/` | Basys 3 pin constraints (`.xdc`) |
+| `constraints/` | Basys 3 pin constraints: `board_top.xdc` (full build), `basys3.xdc` (old switches-to-LEDs warm-up) |
 | `docs/` | Plots (`training_curve.png`) and Vivado synthesis/timing reports (`docs/reports/`) |
-| `scripts/` | `create_project.tcl` (Vivado rebuild), `sim.sh` (run a testbench), `synth.sh` / `synth.tcl` (synthesis and timing reports) |
+| `scripts/` | `create_project.tcl` (Vivado rebuild), `sim.sh` (run a testbench), `synth.sh` / `synth.tcl` (out-of-context synthesis and timing), `build.sh` / `build.tcl` (full board build and bitstream) |
 | `vivado_proj/`, `sim_build/`, `synth_build/` | Generated, git-ignored |
 
 ## How to Run
@@ -153,7 +155,13 @@ CLK_NS=8.0 bash scripts/synth.sh
 
 Reports land in `docs/reports/`.
 
-**5. Rebuild the Vivado project**
+**5. Build the bitstream** (full design with real pins; writes `synth_build/board_top.bit`)
+
+```bash
+bash scripts/build.sh
+```
+
+**6. Rebuild the Vivado project**
 
 ```bash
 "/c/AMDDesignTools/2026.1/Vivado/bin/vivado.bat" -mode batch -source scripts/create_project.tcl

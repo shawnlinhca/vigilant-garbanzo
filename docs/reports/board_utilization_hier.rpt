@@ -1,0 +1,38 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2026.1 (win64) Build 6511674 Tue Jun 16 11:02:23 MDT 2026
+| Date         : Fri Oct 23 15:29:12 2026
+| Host         : DESKTOP-NF5G4CV running 64-bit major release  (build 9200)
+| Command      : report_utilization -hierarchical -file C:/Users/ericy/vigilant-garbanzo/docs/reports/board_utilization_hier.rpt
+| Design       : board_top
+| Device       : xc7a35tcpg236-1
+| Speed File   : -1
+| Design State : Routed
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+Utilization Design Information
+
+Table of Contents
+-----------------
+1. Utilization by Hierarchy
+
+1. Utilization by Hierarchy
+---------------------------
+
++---------------+-----------------------+------------+------------+---------+------+------+--------+--------+------------+
+|    Instance   |         Module        | Total LUTs | Logic LUTs | LUTRAMs | SRLs |  FFs | RAMB36 | RAMB18 | DSP Blocks |
++---------------+-----------------------+------------+------------+---------+------+------+--------+--------+------------+
+| board_top     |                 (top) |       1586 |       1586 |       0 |    0 | 1465 |      8 |      3 |          2 |
+|   (board_top) |                 (top) |         12 |         12 |       0 |    0 |   24 |      0 |      0 |          0 |
+|   u_loader    |           uart_loader |         32 |         32 |       0 |    0 |   57 |      0 |      0 |          0 |
+|   u_net       |               network |       1487 |       1487 |       0 |    0 | 1327 |      8 |      3 |          2 |
+|     (u_net)   |               network |          1 |          1 |       0 |    0 |  226 |      0 |      1 |          0 |
+|     u_l1      |                 layer |        106 |        106 |       0 |    0 |  744 |      8 |      1 |          1 |
+|       (u_l1)  |                 layer |        104 |        104 |       0 |    0 |  744 |      8 |      1 |          0 |
+|     u_l2      | layer__parameterized0 |        313 |        313 |       0 |    0 |  346 |      0 |      1 |          1 |
+|       (u_l2)  | layer__parameterized0 |        244 |        244 |       0 |    0 |  346 |      0 |      1 |          0 |
+|       u_mac   |                   mac |         69 |         69 |       0 |    0 |    0 |      0 |      0 |          1 |
++---------------+-----------------------+------------+------------+---------+------+------+--------+--------+------------+
+* Note: The sum of lower-level cells may be larger than their parent cells total, due to cross-hierarchy LUT combining
+
+
