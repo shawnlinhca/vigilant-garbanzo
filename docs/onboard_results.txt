@@ -1,0 +1,8 @@
+On-board test, 2026-10-23 16:06 (COM3, 115200 baud)
+Images: 10000 (MNIST test set, indices 0 to 9999)
+Board accuracy vs. true labels : 9673/10000 (96.73%)
+Golden model accuracy (same)   : 9673/10000 (96.73%)
+Board agrees with golden model : 10000/10000 (100.00%)
+No reply: 0   Unexpected reply: 0
+Average time per image (mostly UART transfer): 80.0 ms
+

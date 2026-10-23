@@ -18,18 +18,18 @@ The project emphasizes clean SystemVerilog, self-checking testbenches, a bit-exa
 
 ## Roadmap
 
-- [ ] 1. Basics: switches-to-LEDs warm-up and UART (both simulated; hardware run pending)
+- [x] 1. Basics: UART, LEDs, and seven-segment display verified on hardware (the standalone switches-to-LEDs warm-up was simulated only)
 - [x] 2. Train a small model in Python (96.70% test accuracy, float32)
 - [x] 3. Quantize to int8, write a pure-integer golden model, export `.mem` weights (96.73% test accuracy)
 - [x] 4. One MAC unit with a self-checking testbench
 - [x] 5. One layer with a single MAC, compared to the golden model
 - [x] 6. Full network in simulation: 100/100 predictions match the golden model
-- [ ] 7. Run on the board over UART (design, simulation, and bitstream done; hardware run pending)
+- [x] 7. Run on the board over UART: 96.73% accuracy on all 10,000 test images, identical to the golden model
 - [ ] 8. Parallel MACs (4, 8, 16): measure cycles, LUT/DSP/BRAM, and clock speed
 
 ## Results
 
-Measured so far (Python, simulation, and Vivado synthesis):
+Measured so far (Python, simulation, Vivado, and on the board):
 
 | Metric | Result | Measured by |
 | --- | --- | --- |
@@ -44,7 +44,9 @@ Measured so far (Python, simulation, and Vivado synthesis):
 | Timing, `network` module at a 125 MHz target (8 ns) | Met, worst setup slack +0.850 ns | `scripts/synth.sh` |
 | Resources, full board design (post-route) | 1,586 LUTs (7.6%), 1,465 registers (3.5%), 9.5 BRAM tiles (19%), 2 DSPs (2.2%) | `scripts/build.sh` |
 | Timing, full board design at 100 MHz | Met: setup slack +1.563 ns, hold slack +0.164 ns | `scripts/build.sh` |
-| Bitstream | Generated; not yet run on hardware | `scripts/build.sh` |
+| On-board accuracy, 10,000 MNIST test images over UART | 96.73% (9,673/10,000) | `python/send_images.py` |
+| On-board vs. golden model | 10,000/10,000 predictions identical; 0 timeouts, 0 bad replies | `python/send_images.py` |
+| End-to-end time per image over UART (measured) | 80.0 ms average; UART transfer alone is about 68 ms, network compute about 0.26 ms | `python/send_images.py` |
 
 Network-only numbers come from an out-of-context run of the `network` module (Vivado 2026.1, Artix-7 -1 speed grade), which does not model clock-buffer delay or skew. The full-board numbers come from `scripts/build.sh`, which implements `board_top` with the real pin constraints and clock buffer.
 
@@ -69,7 +71,7 @@ The clock gain is small, so the multiplier was not the only limit on speed; the 
 
 With DSP-mapped MACs the worst path at the 10 ns target (8.58 ns, 55% routing) ran from a stored layer-1 accumulator through the ReLU/shift/clamp logic and a 32:1 read mux into layer 2's DSP. Registering the 32 hidden activations splits that into two short paths. It costs 224 registers and no latency (the cycle count is unchanged at 25,587). The design then meets an 8 ns target (125 MHz) with +0.850 ns slack, and the critical path moves to the image block RAM feeding layer 1's DSP. The board clock is 100 MHz and the full board build meets it with margin, so no further clock tuning is planned; DSP-internal pipeline registers plus an MMCM would be the next step to run faster.
 
-Pending: on-board accuracy over UART, and the same measurements for 4, 8, and 16 parallel MACs.
+Pending: the same measurements for 4, 8, and 16 parallel MACs (roadmap step 8). The end-to-end rate on this board is limited by the 115,200-baud UART, not by the network.
 
 ## Architecture
 
@@ -111,13 +113,13 @@ The golden model (`python/golden.py`) is pure integer arithmetic and reads the s
 
 | Folder | Contents |
 | --- | --- |
-| `python/` | Training, quantization, integer golden model, test-vector export |
+| `python/` | Training, quantization, integer golden model, test-vector export, on-board test script (`send_images.py`) |
 | `weights/` | Quantized weights and biases (`.mem`), float model, `quant_params.json` |
 | `src/` | SystemVerilog design sources |
 | `tb/` | Self-checking testbenches; `tb/vectors/` holds exported test vectors |
 | `constraints/` | Basys 3 pin constraints: `board_top.xdc` (full build), `basys3.xdc` (old switches-to-LEDs warm-up) |
 | `docs/` | Plots (`training_curve.png`) and Vivado synthesis/timing reports (`docs/reports/`) |
-| `scripts/` | `create_project.tcl` (Vivado rebuild), `sim.sh` (run a testbench), `synth.sh` / `synth.tcl` (out-of-context synthesis and timing), `build.sh` / `build.tcl` (full board build and bitstream) |
+| `scripts/` | `create_project.tcl` (Vivado rebuild), `sim.sh` (run a testbench), `synth.sh` / `synth.tcl` (out-of-context synthesis and timing), `build.sh` / `build.tcl` (full board build and bitstream), `program.sh` / `program.tcl` (program the board) |
 | `vivado_proj/`, `sim_build/`, `synth_build/` | Generated, git-ignored |
 
 ## How to Run
@@ -164,10 +166,18 @@ Reports land in `docs/reports/`.
 bash scripts/build.sh
 ```
 
-**6. Rebuild the Vivado project**
+**6. Program the board and test it** (board connected over USB and switched on; find the port with `--list`)
+
+```bash
+bash scripts/program.sh
+python python/send_images.py --list
+python python/send_images.py --port COM5 --n 100
+```
+
+The board shows `-` after programming, then each image's digit on the rightmost display digit; the script reports on-board accuracy and agreement with the golden model.
+
+**7. Rebuild the Vivado project**
 
 ```bash
 "/c/AMDDesignTools/2026.1/Vivado/bin/vivado.bat" -mode batch -source scripts/create_project.tcl
 ```
-
-_Building and programming the Basys 3 will be documented once the UART and display modules are done._
