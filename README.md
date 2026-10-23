@@ -78,9 +78,9 @@ The golden model (`python/golden.py`) is pure integer arithmetic and reads the s
 | `src/` | SystemVerilog design sources |
 | `tb/` | Self-checking testbenches; `tb/vectors/` holds exported test vectors |
 | `constraints/` | Basys 3 pin constraints (`.xdc`) |
-| `docs/` | Diagrams, waveforms, and plots (`training_curve.png`) |
-| `scripts/` | `create_project.tcl` (Vivado rebuild) and `sim.sh` (run a testbench) |
-| `vivado_proj/`, `sim_build/` | Generated, git-ignored |
+| `docs/` | Plots (`training_curve.png`) and Vivado synthesis/timing reports (`docs/reports/`) |
+| `scripts/` | `create_project.tcl` (Vivado rebuild), `sim.sh` (run a testbench), `synth.sh` / `synth.tcl` (synthesis and timing reports) |
+| `vivado_proj/`, `sim_build/`, `synth_build/` | Generated, git-ignored |
 
 ## How to Run
 
@@ -111,7 +111,16 @@ bash scripts/sim.sh tb_layer1
 bash scripts/sim.sh tb_network
 ```
 
-**4. Rebuild the Vivado project**
+**4. Synthesize and measure resources and timing** (no board needed; `CLK_NS` is the target clock period in ns)
+
+```bash
+bash scripts/synth.sh
+CLK_NS=8.0 bash scripts/synth.sh
+```
+
+Reports land in `docs/reports/`.
+
+**5. Rebuild the Vivado project**
 
 ```bash
 "/c/AMDDesignTools/2026.1/Vivado/bin/vivado.bat" -mode batch -source scripts/create_project.tcl
