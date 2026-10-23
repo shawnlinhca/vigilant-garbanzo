@@ -6,7 +6,8 @@
 //
 // SHIFT1 must equal "shift1" in weights/quant_params.json.
 module network #(
-    parameter int SHIFT1 = 12
+    parameter int SHIFT1 = 12,
+    parameter int P      = 1      // parallel MACs in layer 1; layer 2 uses min(P, 10)
 ) (
     input  logic       clk,
     input  logic       rst,
@@ -23,6 +24,7 @@ module network #(
     localparam int N_IN  = 784;
     localparam int N_HID = 32;
     localparam int N_OUT = 10;
+    localparam int P2    = (P > N_OUT) ? N_OUT : P;   // layer 2 has only 10 outputs
 
     // ---- Image memory: write port + registered read port (maps to block RAM) ----
     logic [7:0]              img_mem [N_IN];
@@ -38,7 +40,7 @@ module network #(
     logic               l1_busy, l1_done;
     logic signed [31:0] acc1 [N_HID];
 
-    layer #(.N_IN(N_IN), .N_OUT(N_HID), .W_FILE("w1.mem"), .B_FILE("b1.mem")) u_l1 (
+    layer #(.N_IN(N_IN), .N_OUT(N_HID), .P(P), .W_FILE("w1.mem"), .B_FILE("b1.mem")) u_l1 (
         .clk(clk), .rst(rst), .start(start),
         .x_addr(x1_addr), .x_data(x1_data),
         .busy(l1_busy), .done(l1_done), .acc_out(acc1)
@@ -66,7 +68,7 @@ module network #(
     logic               l2_busy, l2_done;
     logic signed [31:0] acc2 [N_OUT];
 
-    layer #(.N_IN(N_HID), .N_OUT(N_OUT), .W_FILE("w2.mem"), .B_FILE("b2.mem")) u_l2 (
+    layer #(.N_IN(N_HID), .N_OUT(N_OUT), .P(P2), .W_FILE("w2.mem"), .B_FILE("b2.mem")) u_l2 (
         .clk(clk), .rst(rst), .start(l1_done),
         .x_addr(x2_addr), .x_data(x2_data),
         .busy(l2_busy), .done(l2_done), .acc_out(acc2)

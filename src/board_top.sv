@@ -11,7 +11,8 @@
 // Button btnC = reset (also cleared automatically at power-up).
 module board_top #(
     parameter int CLKS_PER_BIT = 868,            // 100 MHz / 115200
-    parameter int TIMEOUT_CLKS = 10_000_000      // 0.1 s: discard a stalled partial image
+    parameter int TIMEOUT_CLKS = 10_000_000,     // 0.1 s: discard a stalled partial image
+    parameter int P            = 1               // parallel MACs (see network.sv)
 ) (
     input  logic        clk,                     // 100 MHz
     input  logic        btnC,                    // reset
@@ -54,7 +55,7 @@ module board_top #(
     // ---- The neural network ----
     logic       net_done;
     logic [3:0] pred;
-    network u_net (
+    network #(.P(P)) u_net (
         .clk(clk), .rst(rst),
         .img_we(img_we), .img_waddr(img_waddr), .img_wdata(img_wdata),
         .start(start), .busy(net_busy), .done(net_done), .pred(pred)

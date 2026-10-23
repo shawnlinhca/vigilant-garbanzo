@@ -88,7 +88,7 @@ image (784 x uint8) -> [image RAM] -> layer 1 (784 -> 32, one MAC) -> ReLU/shift
 
 - **Quantization:** int8 weights with one scale per layer; inputs stay as raw 0..255 pixel bytes; 32-bit biases and accumulators. Between layers the accumulator is rounded, shifted right by a constant (a power of two, so no multiplier is needed), and clamped to 0..127.
 - **MAC unit** (`src/mac.sv`): signed 8-bit weight times signed 9-bit input, 32-bit accumulator, with a load input used to start each neuron at its bias.
-- **Layer** (`src/layer.sv`): weights and biases are read from `.mem` files into block-RAM-style memories with a registered read. A state machine computes one neuron at a time and takes N_OUT × (N_IN + 4) cycles.
+- **Layer** (`src/layer.sv`): weights and biases are read from `.mem` files into block-RAM-style memories with a registered read. A state machine computes P neurons at a time with P parallel MAC units that share the input stream (P = 1 is the baseline), and takes ceil(N_OUT / P) × (N_IN + 4) cycles. One memory word holds the P weights for a group, so every MAC is fed each cycle. Layer 2 uses min(P, 10) MACs because it has only 10 outputs.
 - **Argmax** (`src/argmax.sv`): sequential, one comparator, ties go to the lowest digit (same as NumPy).
 - **UART receiver** (`src/uart_rx.sv`): 8N1 at 115,200 baud from the 100 MHz clock (868 clocks per bit), with a two-flop input synchronizer, mid-bit sampling, glitch rejection, and a framing-error flag.
 - **UART loader** (`src/uart_loader.sv`): writes the 784 received bytes into the network's image memory, then starts the network. Framing errors, mid-image stalls (timeout), and bytes arriving while the network is busy discard the partial image so the stream always resyncs.
@@ -105,8 +105,8 @@ Every testbench is self-checking and prints PASS or FAIL.
 | --- | --- |
 | `tb/tb_top.sv` | Switches-to-LEDs warm-up: fixed, walking-one, and random patterns |
 | `tb/tb_mac.sv` | MAC against a reference model: priorities, worst-case sums, 200 random neurons (83,378 checks) |
-| `tb/tb_layer1.sv` | Layer 1 against the Python golden model: all 32 raw accumulators and activations for 10 images, plus cycle count |
-| `tb/tb_network.sv` | Full network against the golden model on real MNIST test images, loaded through the write port |
+| `tb/tb_layer1.sv` | Layer 1 against the Python golden model: all 32 raw accumulators and activations for 10 images, plus the exact cycle count; runs for any P |
+| `tb/tb_network.sv` | Full network against the golden model on real MNIST test images, loaded through the write port, plus the exact latency formula; runs for any P |
 | `tb/tb_uart_rx.sv` | UART receiver: all 256 byte values back-to-back, bad stop bit, glitch rejection, and the real 868-clock bit time |
 | `tb/tb_uart_loader.sv` | UART loader: full image, start only after the last write lands, and recovery from a framing error, a stall, and a busy network |
 | `tb/tb_uart_tx.sv` | UART transmitter: all 256 values decoded by an independent line decoder, exact busy time, send-while-busy ignored, real baud rate |
@@ -119,8 +119,8 @@ The golden model (`python/golden.py`) is pure integer arithmetic and reads the s
 
 | Folder | Contents |
 | --- | --- |
-| `python/` | Training, quantization, integer golden model, test-vector export, on-board test script (`send_images.py`) |
-| `weights/` | Quantized weights and biases (`.mem`), float model, `quant_params.json` |
+| `python/` | Training, quantization, integer golden model, test-vector export, weight layouts for parallel MACs (`export_parallel.py`), on-board test script (`send_images.py`) |
+| `weights/` | Quantized weights and biases (`.mem`), float model, `quant_params.json`; `p4/`, `p8/`, `p16/` hold the wide-word layouts for 4, 8, and 16 parallel MACs |
 | `src/` | SystemVerilog design sources |
 | `tb/` | Self-checking testbenches; `tb/vectors/` holds exported test vectors |
 | `constraints/` | Basys 3 pin constraints: `board_top.xdc` (full build), `basys3.xdc` (old switches-to-LEDs warm-up) |
@@ -155,6 +155,10 @@ python python/export_vectors.py 100
 bash scripts/sim.sh tb_mac
 bash scripts/sim.sh tb_layer1
 bash scripts/sim.sh tb_network
+
+# parallel MACs: export the weight layouts once, then pass P
+python python/export_parallel.py
+P=4 bash scripts/sim.sh tb_network
 ```
 
 **4. Synthesize and measure resources and timing** (no board needed; `CLK_NS` is the target clock period in ns)

@@ -9,6 +9,8 @@ module tb_layer1;
     localparam int N_IMG  = 10;     // images checked (first N_IMG of the vector files)
     localparam int MAX_IMG = 200;   // vector files may hold up to this many images
     localparam int SHIFT1 = 12;     // must match "shift1" in weights/quant_params.json
+    parameter  int P      = 1;      // parallel MACs (override with: P=4 bash scripts/sim.sh tb_layer1)
+    localparam int EXP_CYCLES = ((N_OUT + P - 1) / P) * (N_IN + 4);
 
     logic clk = 1'b0;
     logic rst, start;
@@ -26,7 +28,7 @@ module tb_layer1;
     int errors = 0;
     int checks = 0;
 
-    layer #(.N_IN(N_IN), .N_OUT(N_OUT), .W_FILE("w1.mem"), .B_FILE("b1.mem")) dut (
+    layer #(.N_IN(N_IN), .N_OUT(N_OUT), .P(P), .W_FILE("w1.mem"), .B_FILE("b1.mem")) dut (
         .clk(clk), .rst(rst), .start(start), .x_addr(x_addr), .x_data(x_data),
         .busy(busy), .done(done), .acc_out(acc_out)
     );
@@ -72,10 +74,10 @@ module tb_layer1;
             end
 
             checks++;
-            if (cycles != N_OUT * (N_IN + 4)) begin
+            if (cycles != EXP_CYCLES) begin
                 errors++;
                 $display("FAIL: image %0d took %0d cycles, expected %0d",
-                         k, cycles, N_OUT * (N_IN + 4));
+                         k, cycles, EXP_CYCLES);
             end
 
             for (int n = 0; n < N_OUT; n++) begin
@@ -98,8 +100,8 @@ module tb_layer1;
         end
 
         if (errors == 0)
-            $display("PASS: all %0d checks passed (layer 1 = %0d cycles/image)",
-                     checks, N_OUT * (N_IN + 4));
+            $display("PASS: all %0d checks passed (P=%0d, layer 1 = %0d cycles/image)",
+                     checks, P, EXP_CYCLES);
         else
             $display("FAIL: %0d errors in %0d checks", errors, checks);
         $finish;

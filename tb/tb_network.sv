@@ -8,6 +8,10 @@
 module tb_network;
     localparam int N_IN    = 784;
     localparam int MAX_IMG = 200;
+    parameter  int P       = 1;     // parallel MACs (override with: P=4 bash scripts/sim.sh tb_network)
+    localparam int P2      = (P > 10) ? 10 : P;
+    // layer 1 + layer 2 + 11 cycles of start/argmax overhead (measured: 25587 for P=1)
+    localparam int EXP_CYCLES = ((32 + P - 1) / P) * (784 + 4) + ((10 + P2 - 1) / P2) * (32 + 4) + 11;
 
     logic       clk = 1'b0;
     logic       rst, start;
@@ -24,7 +28,7 @@ module tb_network;
     int n_img = 0;
     int errors = 0, hw_correct = 0, golden_correct = 0, cycles = 0;
 
-    network dut (
+    network #(.P(P)) dut (
         .clk(clk), .rst(rst),
         .img_we(img_we), .img_waddr(img_waddr), .img_wdata(img_wdata),
         .start(start), .busy(busy), .done(done), .pred(pred)
@@ -71,6 +75,10 @@ module tb_network;
                 cycles++;
             end
 
+            if (cycles != EXP_CYCLES) begin
+                errors++;
+                if (errors <= 10) $display("FAIL: image %0d took %0d cycles, expected %0d", k, cycles, EXP_CYCLES);
+            end
             if ({4'b0, pred} !== exp_pred[k]) begin
                 errors++;
                 if (errors <= 10)
@@ -86,7 +94,7 @@ module tb_network;
         else
             $display("FAIL: %0d of %0d predictions differ from the golden model", errors, n_img);
         $display("Hardware correct: %0d/%0d, golden correct: %0d/%0d", hw_correct, n_img, golden_correct, n_img);
-        $display("Latency: %0d cycles per image (%0d us at 100 MHz)", cycles, cycles / 100);
+        $display("P=%0d  Latency: %0d cycles per image (%0d us at 100 MHz)", P, cycles, cycles / 100);
         $finish;
     end
 endmodule
