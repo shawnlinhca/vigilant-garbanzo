@@ -10,9 +10,11 @@ The project emphasizes clean SystemVerilog, self-checking testbenches, a bit-exa
 
 ## Demo
 
-![Basys 3 running the digit classifier](docs/board_demo.jpg)
+<img src="docs/board_demo.png" alt="Basys 3 running the digit classifier" width="360">
 
-A PC streams MNIST test images to the board over USB-UART; the FPGA classifies each one and shows the digit on the seven-segment display. Over all 10,000 test images the board's answers matched the Python integer model exactly (96.73% accuracy).
+[Watch the demo video (MP4)](docs/board_demo.mp4)
+
+A PC streams MNIST test images to the board over USB-UART; the FPGA classifies each one and shows the digit on the seven-segment display. Over all 10,000 test images the board's answers matched the Python integer model exactly (96.73% accuracy). In the photo the display shows the predicted digit, 7, and the lowest LEDs show it in binary (0111).
 
 ## Hardware and Tools
 
@@ -143,7 +145,7 @@ The golden model (`python/golden.py`) is pure integer arithmetic and reads the s
 | `src/` | SystemVerilog design sources |
 | `tb/` | Self-checking testbenches; `tb/vectors/` holds exported test vectors |
 | `constraints/` | Basys 3 pin constraints: `board_top.xdc` (full build), `basys3.xdc` (old switches-to-LEDs warm-up) |
-| `docs/` | Plots (`training_curve.png`) and Vivado synthesis/timing reports (`docs/reports/`) |
+| `docs/` | Demo photo and video, plots (`training_curve.png`), and Vivado synthesis/timing reports (`docs/reports/`) |
 | `scripts/` | `create_project.tcl` (Vivado rebuild), `sim.sh` (run a testbench), `synth.sh` / `synth.tcl` (out-of-context synthesis and timing), `build.sh` / `build.tcl` (full board build and bitstream), `program.sh` / `program.tcl` (program the board) |
 | `vivado_proj/`, `sim_build/`, `synth_build/` | Generated, git-ignored |
 
