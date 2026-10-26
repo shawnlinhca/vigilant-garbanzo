@@ -2,12 +2,6 @@
 
 A small MNIST digit classifier (784 → 32 → 10, int8 weights) implemented in SystemVerilog on a Digilent Basys 3 FPGA.
 
-## Goal
-
-Build a complete, measurable hardware inference pipeline: train a small model in Python, quantize it to int8, and run it on an FPGA using a MAC unit, block RAM for weights, a state-machine controller, ReLU, and argmax. Images are sent to the board over UART and the predicted digit is shown on the seven-segment display.
-
-The project emphasizes clean SystemVerilog, self-checking testbenches, a bit-exact integer golden model, and measured results (accuracy, cycle count, resource usage, clock speed).
-
 ## Demo
 
 <img src="docs/board_demo.png" alt="Basys 3 running the digit classifier" width="360">
@@ -15,6 +9,20 @@ The project emphasizes clean SystemVerilog, self-checking testbenches, a bit-exa
 [Watch the demo video (MP4)](docs/board_demo.mp4)
 
 A PC streams MNIST test images to the board over USB-UART; the FPGA classifies each one and shows the digit on the seven-segment display. Over all 10,000 test images the board's answers matched the Python integer model exactly (96.73% accuracy). In the photo the display shows the predicted digit, 7, and the lowest LEDs show it in binary (0111).
+
+## Highlights
+
+- **96.73% accuracy on all 10,000 MNIST test images, running on the FPGA.** The board's answers matched the Python integer golden model on 10,000 of 10,000 images; int8 quantization cost no measurable accuracy (float32: 96.70%).
+- **Verified at every level:** a bit-exact integer golden model and nine self-checking testbenches, from a single MAC up to the whole board with a simulated PC sending images over a serial line.
+- **Scales with parallel MACs:** 1, 4, 8, and 16 MACs per layer cut latency from 255.9 µs to 16.2 µs at 100 MHz (15.8x) using 26 of the chip's 90 DSP blocks, with LUT use staying flat (1,484 to 1,433).
+- **Small and fast enough:** the full board design uses 1,586 LUTs (7.6%), 9.5 BRAM tiles (19%), and 2 DSPs, and meets the board's 100 MHz clock with +1.563 ns setup slack.
+- **Whole flow is scripted:** Python training and quantization, SystemVerilog design, Vivado simulation, synthesis, bitstream build, board programming, and the on-board accuracy test.
+
+## Goal
+
+Build a complete, measurable hardware inference pipeline: train a small model in Python, quantize it to int8, and run it on an FPGA using a MAC unit, block RAM for weights, a state-machine controller, ReLU, and argmax. Images are sent to the board over UART and the predicted digit is shown on the seven-segment display.
+
+The project emphasizes clean SystemVerilog, self-checking testbenches, a bit-exact integer golden model, and measured results (accuracy, cycle count, resource usage, clock speed).
 
 ## Hardware and Tools
 
@@ -24,18 +32,44 @@ A PC streams MNIST test images to the board over USB-UART; the FPGA classifies e
 - **Training and golden model:** Python 3.13 (PyTorch, NumPy)
 - **Development environment:** Windows, Git Bash, VS Code
 
-## Roadmap
+## Architecture
 
-- [x] 1. Basics: UART, LEDs, and seven-segment display verified on hardware (the standalone switches-to-LEDs warm-up was simulated only)
-- [x] 2. Train a small model in Python (96.70% test accuracy, float32)
-- [x] 3. Quantize to int8, write a pure-integer golden model, export `.mem` weights (96.73% test accuracy)
-- [x] 4. One MAC unit with a self-checking testbench
-- [x] 5. One layer with a single MAC, compared to the golden model
-- [x] 6. Full network in simulation: 100/100 predictions match the golden model
-- [x] 7. Run on the board over UART: 96.73% accuracy on all 10,000 test images, identical to the golden model
-- [x] 8. Parallel MACs (1, 4, 8, 16): up to 15.8x lower latency (1,623 cycles) for 26 DSPs; see the table below
+```
+image (784 x uint8) -> [image RAM] -> layer 1 (784 -> 32, P MACs; P = 1 baseline) -> ReLU/shift/clamp
+                                   -> layer 2 (32 -> 10, min(P, 10) MACs) -> argmax -> digit 0..9
+```
+
+<details>
+<summary><b>Module descriptions</b></summary>
+
+- **Quantization:** int8 weights with one scale per layer; inputs stay as raw 0..255 pixel bytes; 32-bit biases and accumulators. Between layers the accumulator is rounded, shifted right by a constant (a power of two, so no multiplier is needed), and clamped to 0..127.
+- **MAC unit** (`src/mac.sv`): signed 8-bit weight times signed 9-bit input, 32-bit accumulator, with a load input used to start each neuron at its bias.
+- **Layer** (`src/layer.sv`): weights and biases are read from `.mem` files into block-RAM-style memories with a registered read. A state machine computes P neurons at a time with P parallel MAC units that share the input stream (P = 1 is the baseline), and takes ceil(N_OUT / P) × (N_IN + 4) cycles. One memory word holds the P weights for a group, so every MAC is fed each cycle. Layer 2 uses min(P, 10) MACs because it has only 10 outputs.
+- **Argmax** (`src/argmax.sv`): sequential, one comparator, ties go to the lowest digit (same as NumPy).
+- **UART receiver** (`src/uart_rx.sv`): 8N1 at 115,200 baud from the 100 MHz clock (868 clocks per bit), with a two-flop input synchronizer, mid-bit sampling, glitch rejection, and a framing-error flag.
+- **UART loader** (`src/uart_loader.sv`): writes the 784 received bytes into the network's image memory, then starts the network. Framing errors, mid-image stalls (timeout), and bytes arriving while the network is busy discard the partial image so the stream always resyncs.
+- **UART transmitter** (`src/uart_tx.sv`): same 8N1 format and baud generator as the receiver; sends the predicted digit back to the PC.
+- **Seven-segment driver** (`src/seg7.sv`): shows the predicted digit (or "-" before a result) on the rightmost display digit.
+- **Board top level** (`src/board_top.sv`): ties it together for the Basys 3. A PC sends 784 pixel bytes over the USB-UART; the board classifies the image, shows the digit on the seven-segment display, and replies with the digit as an ASCII character. LEDs show the last prediction, an image counter, and error/busy flags; the center button is reset.
+- **Network** (`src/network.sv`): chains the pieces. Images are written in through a byte-wide write port, which the UART loader drives.
+
+</details>
 
 ## Results
+
+At a glance, for the parallel-MAC variants of the network (latency at the board's 100 MHz clock):
+
+| MACs per layer (P) | Latency at 100 MHz | Speedup | DSPs used (of 90) |
+| --- | --- | --- | --- |
+| 1 | 255.9 µs | 1.00x | 2 |
+| 4 | 64.2 µs | 3.98x | 8 |
+| 8 | 32.4 µs | 7.91x | 16 |
+| 16 | 16.2 µs | 15.77x | 26 |
+
+All four variants are verified against the golden model in simulation; the on-board run used P = 1. The UART link, not the network, limits the board's end-to-end rate (about 80 ms per image, of which the network is 0.26 ms). Details are in the expandable sections below.
+
+<details>
+<summary><b>All measured results (accuracy, latency, resources, timing, on-board)</b></summary>
 
 Measured so far (Python, simulation, Vivado, and on the board):
 
@@ -58,7 +92,10 @@ Measured so far (Python, simulation, Vivado, and on the board):
 
 Network-only numbers come from an out-of-context run of the `network` module (Vivado 2026.1, Artix-7 -1 speed grade), which does not model clock-buffer delay or skew. The full-board numbers come from `scripts/build.sh`, which implements `board_top` with the real pin constraints and clock buffer.
 
-### Multiplier mapping: LUTs vs. DSP blocks
+</details>
+
+<details>
+<summary><b>Multiplier mapping: LUTs vs. DSP blocks</b></summary>
 
 _Both runs below used a 10 ns target, before the timing fix in the next section._
 
@@ -75,13 +112,19 @@ By default Vivado built the 8x9-bit multiplier from LUTs. Adding `(* use_dsp = "
 
 The clock gain is small, so the multiplier was not the only limit on speed; the critical path is examined in `docs/reports/critical_path.rpt`.
 
-### Timing: critical-path fix
+</details>
+
+<details>
+<summary><b>Timing: critical-path fix</b></summary>
 
 With DSP-mapped MACs the worst path at the 10 ns target (8.58 ns, 55% routing) ran from a stored layer-1 accumulator through the ReLU/shift/clamp logic and a 32:1 read mux into layer 2's DSP. Registering the 32 hidden activations splits that into two short paths. It costs 224 registers and no latency (the cycle count is unchanged at 25,587). The design then meets an 8 ns target (125 MHz) with +0.850 ns slack, and the critical path moves to the image block RAM feeding layer 1's DSP. The board clock is 100 MHz and the full board build meets it with margin, so no further clock tuning is planned; DSP-internal pipeline registers plus an MMCM would be the next step to run faster. (That measurement gave +0.850 ns slack; re-measured after the later parallel-MAC refactor the same configuration gives +0.794 ns, which is the figure in the table above. Small differences are expected when the netlist changes slightly and is placed and routed again.)
 
-### Parallel MACs
+</details>
 
-Each layer can use P MAC units working on P neurons at once, sharing the input stream (P = 1 is the baseline above; layer 2 has only 10 outputs, so it uses min(P, 10) MACs). All variants pass the same end-to-end simulation against the golden model (100/100 predictions identical), and each testbench checks the exact cycle count. Resources and timing are from out-of-context synthesis of the `network` module at an 8 ns (125 MHz) target; latency is in clock cycles, converted at 100 MHz.
+<details>
+<summary><b>Parallel MACs: full table and analysis</b></summary>
+
+Each layer can use P MAC units working on P neurons at once, sharing the input stream (P = 1 is the baseline in the full results table; layer 2 has only 10 outputs, so it uses min(P, 10) MACs). All variants pass the same end-to-end simulation against the golden model (100/100 predictions identical), and each testbench checks the exact cycle count. Resources and timing are from out-of-context synthesis of the `network` module at an 8 ns (125 MHz) target; latency is in clock cycles, converted at 100 MHz.
 
 | MACs per layer (P) | Latency (cycles) | Speedup | Latency at 100 MHz | LUTs | Registers | BRAM tiles | DSPs | Setup slack at 8 ns | Est. max clock* |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -99,28 +142,14 @@ Each layer can use P MAC units working on P neurons at once, sharing the input s
 
 Per-variant reports are in `docs/reports/p1/`, `p4/`, `p8/`, and `p16/`, and the table is regenerated by `bash scripts/sweep.sh`.
 
-
-## Architecture
-
-```
-image (784 x uint8) -> [image RAM] -> layer 1 (784 -> 32, one MAC) -> ReLU/shift/clamp
-                                   -> layer 2 (32 -> 10, one MAC) -> argmax -> digit 0..9
-```
-
-- **Quantization:** int8 weights with one scale per layer; inputs stay as raw 0..255 pixel bytes; 32-bit biases and accumulators. Between layers the accumulator is rounded, shifted right by a constant (a power of two, so no multiplier is needed), and clamped to 0..127.
-- **MAC unit** (`src/mac.sv`): signed 8-bit weight times signed 9-bit input, 32-bit accumulator, with a load input used to start each neuron at its bias.
-- **Layer** (`src/layer.sv`): weights and biases are read from `.mem` files into block-RAM-style memories with a registered read. A state machine computes P neurons at a time with P parallel MAC units that share the input stream (P = 1 is the baseline), and takes ceil(N_OUT / P) × (N_IN + 4) cycles. One memory word holds the P weights for a group, so every MAC is fed each cycle. Layer 2 uses min(P, 10) MACs because it has only 10 outputs.
-- **Argmax** (`src/argmax.sv`): sequential, one comparator, ties go to the lowest digit (same as NumPy).
-- **UART receiver** (`src/uart_rx.sv`): 8N1 at 115,200 baud from the 100 MHz clock (868 clocks per bit), with a two-flop input synchronizer, mid-bit sampling, glitch rejection, and a framing-error flag.
-- **UART loader** (`src/uart_loader.sv`): writes the 784 received bytes into the network's image memory, then starts the network. Framing errors, mid-image stalls (timeout), and bytes arriving while the network is busy discard the partial image so the stream always resyncs.
-- **UART transmitter** (`src/uart_tx.sv`): same 8N1 format and baud generator as the receiver; sends the predicted digit back to the PC.
-- **Seven-segment driver** (`src/seg7.sv`): shows the predicted digit (or "-" before a result) on the rightmost display digit.
-- **Board top level** (`src/board_top.sv`): ties it together for the Basys 3. A PC sends 784 pixel bytes over the USB-UART; the board classifies the image, shows the digit on the seven-segment display, and replies with the digit as an ASCII character. LEDs show the last prediction, an image counter, and error/busy flags; the center button is reset.
-- **Network** (`src/network.sv`): chains the pieces. Images are written in through a byte-wide write port, which the UART receiver will drive.
+</details>
 
 ## Verification
 
 Every testbench is self-checking and prints PASS or FAIL.
+
+<details>
+<summary><b>Testbench list</b></summary>
 
 | Testbench | What it checks |
 | --- | --- |
@@ -133,6 +162,8 @@ Every testbench is self-checking and prints PASS or FAIL.
 | `tb/tb_uart_tx.sv` | UART transmitter: all 256 values decoded by an independent line decoder, exact busy time, send-while-busy ignored, real baud rate |
 | `tb/tb_seg7.sv` | Seven-segment driver: every digit, the error pattern, and the blank state, specified by lit-segment letters |
 | `tb/tb_board_top.sv` | Whole board end to end: real MNIST images sent over a serial line, checking the ASCII reply, display, and LEDs, including recovery from a framing error mid-image |
+
+</details>
 
 The golden model (`python/golden.py`) is pure integer arithmetic and reads the same `.mem` files the hardware loads. `python/export_vectors.py` writes its expected values into `tb/vectors/`.
 
@@ -182,6 +213,9 @@ python python/export_parallel.py
 P=4 bash scripts/sim.sh tb_network
 ```
 
+<details>
+<summary><b>Steps 4 to 7: synthesis, bitstream, programming the board, project rebuild</b></summary>
+
 **4. Synthesize and measure resources and timing** (no board needed; `CLK_NS` is the target clock period in ns)
 
 ```bash
@@ -212,3 +246,21 @@ The board shows `-` after programming, then each image's digit on the rightmost 
 ```bash
 "/c/AMDDesignTools/2026.1/Vivado/bin/vivado.bat" -mode batch -source scripts/create_project.tcl
 ```
+
+</details>
+
+## Project Roadmap
+
+<details>
+<summary><b>Roadmap (all steps complete)</b></summary>
+
+- [x] 1. Basics: UART, LEDs, and seven-segment display verified on hardware (the standalone switches-to-LEDs warm-up was simulated only)
+- [x] 2. Train a small model in Python (96.70% test accuracy, float32)
+- [x] 3. Quantize to int8, write a pure-integer golden model, export `.mem` weights (96.73% test accuracy)
+- [x] 4. One MAC unit with a self-checking testbench
+- [x] 5. One layer with a single MAC, compared to the golden model
+- [x] 6. Full network in simulation: 100/100 predictions match the golden model
+- [x] 7. Run on the board over UART: 96.73% accuracy on all 10,000 test images, identical to the golden model
+- [x] 8. Parallel MACs (1, 4, 8, 16): up to 15.8x lower latency (1,623 cycles) for 26 DSPs; see Results
+
+</details>
